@@ -1,0 +1,101 @@
+{
+  "repetitions": 3,
+  "variants": {
+    "in_process_memory": {
+      "target_p95_ms": 5.0,
+      "runs": [
+        {
+          "p50_ms": 0.1679,
+          "p95_ms": 0.2424,
+          "p99_ms": 0.3623,
+          "mean_ms": 0.185,
+          "min_ms": 0.1579,
+          "max_ms": 3.0304
+        },
+        {
+          "p50_ms": 0.1661,
+          "p95_ms": 0.2154,
+          "p99_ms": 0.3503,
+          "mean_ms": 0.1803,
+          "min_ms": 0.16,
+          "max_ms": 2.3526
+        },
+        {
+          "p50_ms": 0.1641,
+          "p95_ms": 0.2169,
+          "p99_ms": 0.3819,
+          "mean_ms": 0.1778,
+          "min_ms": 0.1574,
+          "max_ms": 2.2119
+        }
+      ],
+      "p95_min_ms": 0.2154,
+      "p95_max_ms": 0.2424,
+      "all_runs_pass_target": true
+    },
+    "in_process_sqlite": {
+      "target_p95_ms": 10.0,
+      "runs": [
+        {
+          "p50_ms": 0.2012,
+          "p95_ms": 0.2605,
+          "p99_ms": 0.3528,
+          "mean_ms": 0.2142,
+          "min_ms": 0.1912,
+          "max_ms": 0.5551
+        },
+        {
+          "p50_ms": 0.2057,
+          "p95_ms": 0.4145,
+          "p99_ms": 1.263,
+          "mean_ms": 0.2612,
+          "min_ms": 0.1907,
+          "max_ms": 6.249
+        },
+        {
+          "p50_ms": 0.2053,
+          "p95_ms": 0.3568,
+          "p99_ms": 0.7303,
+          "mean_ms": 0.241,
+          "min_ms": 0.1901,
+          "max_ms": 3.046
+        }
+      ],
+      "p95_min_ms": 0.2605,
+      "p95_max_ms": 0.4145,
+      "all_runs_pass_target": true
+    },
+    "loopback_http_sidecar": {
+      "target_p95_ms": 20.0,
+      "runs": [
+        {
+          "p50_ms": 1.5482,
+          "p95_ms": 2.3466,
+          "p99_ms": 5.0131,
+          "mean_ms": 1.6887,
+          "min_ms": 1.1276,
+          "max_ms": 8.1612
+        },
+        {
+          "p50_ms": 1.494,
+          "p95_ms": 2.0291,
+          "p99_ms": 3.747,
+          "mean_ms": 1.5718,
+          "min_ms": 1.1086,
+          "max_ms": 6.6637
+        },
+        {
+          "p50_ms": 1.4576,
+          "p95_ms": 2.2572,
+          "p99_ms": 3.8722,
+          "mean_ms": 1.6508,
+          "min_ms": 1.118,
+          "max_ms": 47.9501
+        }
+      ],
+      "p95_min_ms": 2.0291,
+      "p95_max_ms": 2.3466,
+      "all_runs_pass_target": true
+    }
+  }
+}

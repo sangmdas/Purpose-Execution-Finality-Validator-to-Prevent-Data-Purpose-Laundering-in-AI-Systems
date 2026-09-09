@@ -1,0 +1,13 @@
+package main
+import("crypto/sha256";"encoding/hex";"encoding/json";"fmt";"os")
+type Root struct{Cases []Case `json:"cases"`}
+type Case struct{Name string `json:"name"`; Act map[string]interface{} `json:"act"`; Record map[string]interface{} `json:"record"`; Context map[string]interface{} `json:"context"`; Expected string `json:"expected"`; Digest string `json:"act_digest"`}
+func s(m map[string]interface{},k string)string{if v,ok:=m[k];ok{return fmt.Sprint(v)};return ""}
+func b(m map[string]interface{},k string)bool{v,ok:=m[k];return ok&&v==true}
+func n(m map[string]interface{},k string)json.Number{if v,ok:=m[k].(json.Number);ok{return v};return json.Number("0")}
+func reason(c Case)string{
+ a,r,x:=c.Act,c.Record,c.Context
+ if b(x,"force_timeout"){return "VALIDATION_TIMEOUT"};if !b(x,"binding_store_available"){return "BINDING_STORE_UNAVAILABLE"};if !b(x,"binding_store_integrity_ok"){return "BINDING_STORE_INTEGRITY_FAILURE"};if r==nil{return "NO_BINDING_RECORD"}
+ now,_:=n(x,"now_ms").Int64();ae,_:=n(a,"expires_ms").Int64();re,_:=n(r,"valid_until_ms").Int64();if now>ae{return "CANDIDATE_EXPIRED"};if now>re{return "BINDING_EXPIRED"};if b(r,"revoked"){return "BINDING_REVOKED"}
+ if s(a,"policy_version")!=s(r,"policy_version"){return "POLICY_VERSION_MISMATCH"};if s(x,"authenticated_requester")!=s(a,"requester_id")||s(a,"requester_id")!=s(r,"requester_id"){return "REQUESTER_MISMATCH"};if s(x,"authenticated_workload")!=s(a,"workload_id")||s(a,"workload_id")!=s(r,"workload_id"){return "WORKLOAD_MISMATCH"};if s(a,"object_id")!=s(r,"object_id"){return "OBJECT_MISMATCH"};if s(a,"workflow_id")!=s(r,"workflow_id"){return "WORKFLOW_MISMATCH"};if s(a,"operation")!=s(r,"allowed_operation"){return "OPERATION_MISMATCH"};if s(a,"destination_id")!=s(r,"allowed_destination"){return "DESTINATION_MISMATCH"};if !b(x,"order_exists"){return "WORKFLOW_NOT_FOUND"};if !b(x,"object_association_ok"){return "OBJECT_ASSOCIATION_MISMATCH"};if !b(x,"recipient_assignment_ok"){return "RECIPIENT_ASSIGNMENT_MISMATCH"};if !b(x,"attestation_ok"){return "ATTESTATION_FAILURE"};return "ALLOW"}
+func main(){f,err:=os.Open("vectors/conformance_vectors.json");if err!=nil{panic(err)};d:=json.NewDecoder(f);d.UseNumber();var root Root;if err=d.Decode(&root);err!=nil{panic(err)};fail:=0;for _,c:=range root.Cases{raw,_:=json.Marshal(c.Act);h:=sha256.Sum256(raw);dg:=hex.EncodeToString(h[:]);got:=reason(c);if got!=c.Expected||dg!=c.Digest{fmt.Printf("FAIL %s expected=%s got=%s digest=%v\n",c.Name,c.Expected,got,dg==c.Digest);fail++}};fmt.Printf("Go conformance: %d/%d passed\n",len(root.Cases)-fail,len(root.Cases));if fail>0{os.Exit(1)}}

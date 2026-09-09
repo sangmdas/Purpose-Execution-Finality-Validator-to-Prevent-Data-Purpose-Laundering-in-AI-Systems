@@ -1,0 +1,1178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE rfc [
+<!ENTITY nbsp "&#160;">
+]>
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude"
+     category="info"
+     docName="draft-das-purpose-execution-finality-01"
+     ipr="trust200902"
+     submissionType="independent"
+     obsoletes="" updates="" xml:lang="en"
+     tocInclude="true" tocDepth="3" symRefs="true" sortRefs="true"
+     version="3">
+
+  <front>
+    <title abbrev="Data-Purpose Laundering Prevention">Data-Purpose Laundering Prevention: Execution-Finality for
+    Preventing Cross-Domain Data Reuse</title>
+
+    <seriesInfo name="Internet-Draft" value="draft-das-purpose-execution-finality-01"/>
+
+    <author initials="S." surname="Das" fullname="Sangam Kumar Das">
+      <organization>Independent Inventor</organization>
+      <address>
+        <postal>
+          <city>Balasore</city>
+          <region>Odisha</region>
+          <country>India</country>
+        </postal>
+        <email>info@sangamdas.com</email>
+      </address>
+    </author>
+
+    <date year="2026" month="September" day="9"/>
+
+    <area>Security</area>
+    <workgroup>Individual Submission</workgroup>
+
+    <keyword>purpose limitation</keyword>
+    <keyword>execution finality</keyword>
+    <keyword>purpose laundering</keyword>
+    <keyword>privacy</keyword>
+    <keyword>capability</keyword>
+    <keyword>access control</keyword>
+    <keyword>authorization</keyword>
+    <keyword>data protection</keyword>
+    <keyword>GDPR</keyword>
+    <keyword>AI Act</keyword>
+    <keyword>agentic AI</keyword>
+    <keyword>zero trust</keyword>
+    <keyword>attestation</keyword>
+    <keyword>data lineage</keyword>
+    <keyword>cross-domain data reuse</keyword>
+
+    <abstract>
+      <t>Systems that collect data for one stated purpose routinely permit
+      that data, or values derived from it, to be consumed by a second
+      system for a different purpose -- not because the second use was
+      authorized, but because nothing in the protocol path was capable of
+      refusing it. The most common technical control in deployment today
+      is a self-asserted purpose string: a "purpose" claim in a token, a
+      field in an API request, a comment in a data-sharing agreement. A
+      self-asserted string is evidence of intent, not proof of authority,
+      and it fails precisely when it matters most -- when the requester
+      lies.</t>
+
+      <t>This document specifies an execution-finality architecture in
+      which a Candidate Act to read, transmit, or derive from a protected
+      data object does not become effective merely because a caller labels
+      its request with an allowed purpose. Effect is withheld until a
+      Protected Enforcement Domain verifies caller identity, requested
+      operation, and destination against binding records -- not against
+      caller-supplied metadata -- and issues a scoped, non-bearer
+      Execution Handle before any release occurs. The document works
+      through a single running example (a delivery address later targeted
+      by an unrelated advertising system) to make the failure mode and the
+      enforcement boundary concrete, and states plainly which part of the
+      problem this architecture does not solve. It is offered as an
+      architectural pattern for discussion, not as a proposal for a new
+      wire protocol.</t>
+
+      <t>Cross-referencing data across systems, including in advertising,
+      is a legitimate and economically necessary function, and this
+      document does not argue for eliminating it; doing so would stall
+      innovation and materially harm the businesses that depend on it.
+      What this architecture offers such systems is a way to make an
+      authorized combination of data technically verifiable at the
+      moment it happens, rather than leaving that boundary to rest on
+      a data-sharing agreement nobody downstream actually checks --
+      making lawful cross-referencing demonstrable, not making
+      cross-referencing itself the target.</t>
+
+      <t>The same gap appears when four applications sit on a shared
+      raw-data path. Applications A, B, and C may be known operators:
+      they host to published standards, maintain written ethics and
+      paper policies, and implement the technical controls those
+      policies require. This document does not argue that such
+      operators should be denied raw data they are authorized to
+      receive. Application D may request that same raw object.
+      Paper policy and a self-asserted purpose string give no
+      technical reason to believe that D will confine the object to
+      the purpose and jurisdiction under which it was collected,
+      rather than reuse it for an unauthorized purpose -- including
+      surveillance or intelligence activity directed against the
+      jurisdiction that originally authorized collection. This
+      architecture does not ask A, B, or C to stop receiving
+      authorized raw data; it asks that D's Candidate Act be refused
+      at the Protected Enforcement Domain unless binding records,
+      not D's own label, establish that D, the requested operation,
+      and the destination are actually authorized -- so that faith
+      in D is replaced by a check D cannot write.</t>
+
+      <t>A further motivation is stated directly here because it shapes
+      several design choices in this document: the same technical
+      capacity that lets an advertising system profitably combine
+      location and behavioral signals across sources is, absent a
+      verifiable purpose boundary, also capable of exposing patterns --
+      such as the movement of military personnel or the operating rhythm
+      of critical infrastructure -- to a party in a jurisdiction other
+      than the one the data was collected in. Aggregated commercial
+      location and behavioral data has, in publicly reported incidents,
+      already been shown capable of revealing exactly this kind of
+      sensitive pattern. This document does not ask commercial systems
+      to stop combining data for legitimate purposes; it asks that a
+      combination authorized for commercial targeting be technically
+      distinguishable, at the moment of use, from a combination that has
+      crossed into cross-jurisdictional intelligence-gathering territory
+      the data was never authorized for.</t>
+    </abstract>
+  </front>
+
+  <middle>
+
+    <section anchor="intro" numbered="true" toc="default">
+      <name>Introduction</name>
+
+      <t>Purpose limitation is a stated requirement across data protection
+      law, sectoral regulation, and internal governance policy: data
+      collected for one purpose should not be repurposed for another
+      without new authority. It is, at the protocol level, almost never
+      enforced. What is typically enforced is that a request carries a
+      "purpose" value the requester chose to write down.</t>
+
+      <t>This gap is not a corner case. It is the default shape of most
+      data-sharing architectures in production today: an access-control
+      check confirms that a caller is <em>permitted to call the API</em>,
+      and a separate, unenforced convention -- a contract clause, a
+      privacy notice, a code comment -- says what the caller is supposed
+      to do with the response. Nothing in the request path distinguishes
+      a truthful purpose claim from a false one, because the claim was
+      never checked against anything the requester does not control.</t>
+
+      <t>This document uses a single concrete scenario to walk through
+      what changes when purpose is treated as something to be verified
+      rather than declared. A delivery application collects a home
+      address in order to fulfil an order. An unrelated advertising
+      system later attempts to use that same address to infer household
+      income for ad targeting. Every variation of that attempt -- a
+      direct request, a relabeled request, a request issued from inside
+      an attested secure enclave, a request for a value merely
+      <em>derived</em> from the address -- is traced through an
+      enforcement boundary that answers one question before doing
+      anything else: is this caller, this operation, and this destination
+      actually authorized, based on records the caller cannot write
+      to?</t>
+
+      <t>The architecture generalizes past the delivery/advertising
+      example to any setting where data crosses an organizational,
+      workload, or trust boundary and the receiving side has an incentive
+      to reuse it for something other than what it was released for:
+      cross-tenant AI agent tool use, cross-border data transfer under
+      jurisdictional restriction, and inter-service data sharing inside a
+      single company under an internal purpose limitation policy are all
+      instances of the same problem. This document keeps the running
+      example narrow so the mechanism stays concrete; companion drafts in
+      the same series (<xref target="DAS-EU-AI-ACT"/>,
+      <xref target="DAS-GLOBAL-PRIVACY"/>,
+      <xref target="DAS-PRECISION-EGRESS"/>) apply the same underlying
+      architecture to EU AI Act high-risk system enforcement,
+      general-purpose privacy-execution enforcement, and precision-bounded
+      data egress respectively.
+      <xref target="FUTURIUM-PURPOSE-LAUNDERING"/> develops the GDPR
+      purpose-limitation and high-risk AI governance framing of this same
+      delivery/advertising pattern in regulatory detail, and
+      <xref target="FUTURIUM-PAPER-COMPLIANCE"/> situates that framing
+      within the broader argument for moving from paper compliance to
+      technical enforcement under GDPR and the EU AI Act; this document
+      is the protocol-mechanics counterpart to that discussion. See
+      <xref target="resources"/> for a Resources pointer to the drafts
+      and the runnable reference implementation that develop these
+      mechanics further.</t>
+
+      <t>The architecture does not claim to solve purpose limitation in
+      general. <xref target="worked-example-close"/> and
+      <xref target="threat-model"/> state directly what remains unsolved
+      once data has been legitimately released as plaintext to an
+      authorized recipient.</t>
+
+      <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+      NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+      "MAY", and "OPTIONAL" in this document are to be interpreted as
+      described in BCP&nbsp;14 <xref target="RFC2119"/>
+      <xref target="RFC8174"/> when, and only when, they appear in all
+      capitals, as shown here.</t>
+    </section>
+
+    <section anchor="terminology" numbered="true" toc="default">
+      <name>Terminology</name>
+
+      <dl newline="false" spacing="normal">
+        <dt>Candidate Act:</dt>
+        <dd>A request to read, transmit, transform, or derive from a
+        protected data object. A Candidate Act has no effect on its own;
+        it is a proposal for an effect.</dd>
+
+        <dt>Non-Effective State:</dt>
+        <dd>The state of a Candidate Act prior to validation. No data
+        release, decryption, or downstream write occurs while a Candidate
+        Act remains in this state.</dd>
+
+        <dt>Protected Enforcement Domain (PED):</dt>
+        <dd>The component that evaluates a Candidate Act against binding
+        records -- caller identity, order/workflow state, recipient
+        assignment, and policy version -- and decides whether to advance
+        it out of the Non-Effective State. The PED does not accept
+        caller-supplied metadata (such as a "purpose" field) as evidence
+        on its own.</dd>
+
+        <dt>Execution Handle:</dt>
+        <dd>A short-lived, non-bearer, scoped authorization issued by the
+        PED after a Candidate Act passes validation. An Execution Handle
+        is bound to a specific data object, operation, requester identity,
+        and recipient; it is not a general-purpose credential and is not
+        intended to be transferable.</dd>
+
+        <dt>Finality Sink:</dt>
+        <dd>The boundary at which a protected data object, or a value
+        derived from it, is actually released, decrypted, or written to a
+        destination store. The Finality Sink accepts only a valid,
+        unexpired, unrevoked Execution Handle.</dd>
+
+        <dt>Ledger-Anchored Validation Receipt (LAVR):</dt>
+        <dd>An enforcement artifact -- not an audit log -- generated by
+        the PED at the point a Candidate Act is validated or rejected. A
+        LAVR records the check performed, its result, and a hash-chained,
+        domain-signed anchor, and is generated regardless of outcome.</dd>
+
+        <dt>Algorithmic Logic Fingerprint (ALF):</dt>
+        <dd>A binding of the specific operation or computation a
+        Candidate Act requests (e.g., "obtain delivery destination"
+        versus "infer household income") to the set of operations the
+        governing policy actually permits on that data object.</dd>
+
+        <dt>Capability-Validated Inbound Descriptor (CVID):</dt>
+        <dd>The structured description of an inbound Candidate Act --
+        caller, requested operation, target object, destination -- that
+        the PED evaluates against binding records before issuing an
+        Execution Handle.</dd>
+
+        <dt>Purpose Laundering:</dt>
+        <dd>The practice, intentional or not, of obtaining data or a
+        value derived from it under one declared purpose and consuming it
+        under a different, unauthorized purpose, where the receiving
+        system's own request format permits the original purpose label to
+        travel with the data without being re-verified at the point of
+        reuse.</dd>
+      </dl>
+    </section>
+
+    <section anchor="problem" numbered="true" toc="default">
+      <name>Problem Statement</name>
+
+      <section anchor="purpose-not-verifiable" numbered="true" toc="default">
+        <name>Self-Asserted Purpose Is Not Verifiable Purpose</name>
+        <t>Most deployed systems that reference "purpose" at all do so as
+        a string carried in a token claim (e.g., a JWT claim, see
+        <xref target="RFC7519"/>), an API parameter, or a log field. That
+        string is written by the same party requesting access. A
+        verification step that only checks whether the field is present,
+        well-formed, or drawn from an enumerated list does not verify that
+        the caller's actual operation matches the label -- it verifies
+        that the caller knows which label to write.</t>
+      </section>
+
+      <section anchor="attestation-vs-authz" numbered="true" toc="default">
+        <name>Attestation Answers a Different Question Than
+        Authorization</name>
+        <t>Remote attestation (see <xref target="RFC9334"/>) establishes
+        that a piece of code is running in an expected state on expected
+        hardware. It does not establish that the workload attested is
+        authorized to perform a specific operation on a specific data
+        object. A correctly attested enclave running an unauthorized
+        computation is still an unauthorized computation; attestation and
+        purpose authorization are orthogonal checks, and treating a
+        passed attestation as implicit authorization silently collapses
+        that distinction.</t>
+      </section>
+
+      <section anchor="derived-data-carries" numbered="true" toc="default">
+        <name>Derived Data Carries the Restriction, Not Just the
+        Value</name>
+        <t>A value computed from restricted data (e.g., an income
+        estimate computed from a home address) is not automatically free
+        of the restriction that governed the source, even where the
+        derived value contains none of the original data verbatim.
+        Without deliberate propagation of source lineage to the derived
+        object, a downstream consumer of the derived value bypasses every
+        control placed on the source.</t>
+      </section>
+
+      <section anchor="residual-limit" numbered="true" toc="default">
+        <name>The Residual Limit: Plaintext Already Released</name>
+        <t>Once a protected value is legitimately released as plaintext
+        to an authorized recipient, this architecture -- or any
+        architecture operating at the request/response boundary -- cannot
+        guarantee that the recipient will not copy, screenshot, or
+        re-transmit that value outside the enforced path.
+        <xref target="worked-example-close"/> and
+        <xref target="threat-model"/> return to this point; it is stated
+        here because any reader evaluating this document for what it does
+        NOT do should not have to search for the admission.</t>
+      </section>
+    </section>
+
+    <section anchor="architecture" numbered="true" toc="default">
+      <name>Architecture Overview</name>
+
+      <t>The architecture separates two things that are frequently
+      conflated in deployed systems: the authority to request an
+      operation, and the capability to actually perform it. A Candidate
+      Act carries no capability. It is evaluated by a Protected
+      Enforcement Domain against records the requester did not write
+      (order state, recipient assignment, policy version, workload
+      identity). Only on a pass does the PED issue a scoped Execution
+      Handle, and only a Finality Sink presented with a valid Execution
+      Handle releases, decrypts, or writes the underlying value. Every
+      evaluation, pass or fail, produces a LAVR.</t>
+
+      <artwork name="" type="" align="left" alt="Candidate Act flowing through the Protected Enforcement Domain to an Execution Handle and Finality Sink"><![CDATA[
+    Requester --Candidate Act--> [Protected Enforcement Domain]
+                                         |
+                           binding-record checks (Section 5.2)
+                                         |
+                                pass? --------> Execution Handle
+                                         |              |
+                                fail --> LAVR    Finality Sink
+                                         |              |
+                                       LAVR         release
+]]></artwork>
+
+      <t>This differs from a conventional access-control gate in one
+      load-bearing respect: the PED's checks are defined over records
+      external to the request (what the request <em>is about</em>), not
+      over fields internal to the request (what the request
+      <em>says about itself</em>). A caller cannot pass validation by
+      changing what it writes in its own request.</t>
+    </section>
+
+    <section anchor="worked-example" numbered="true" toc="default">
+      <name>Worked Example</name>
+
+      <section anchor="collection" numbered="true" toc="default">
+        <name>Collection: Binding the Data Object to a Permitted Use</name>
+        <t>A customer provides a delivery address for a specific order.
+        The address is stored as a protected data object. A separate,
+        integrity-protected policy record binds that object to a single
+        permitted workflow, operation, and recipient class, with an
+        explicit disallowed-operation entry and an expiry:</t>
+
+        <artwork name="" type="" align="left" alt="Policy record binding a data object to its permitted use"><![CDATA[
+   Data object: address-619
+   Allowed workflow: delivery-order-842
+   Allowed operation: obtain delivery destination
+   Allowed recipient: assigned courier service
+   Disallowed operation: advertising-profile enrichment
+   Expiry: configured delivery-access deadline
+   Policy version: 38
+]]></artwork>
+
+        <t>The party that will later compute an advertising profile is
+        never given the address's decryption key or database credentials.
+        If it were, every check described below would be enforcement
+        theater -- bypassable at will by the party the checks are meant
+        to constrain.</t>
+      </section>
+
+      <section anchor="legit-request" numbered="true" toc="default">
+        <name>A Legitimate Request</name>
+        <t>The delivery service submits a Candidate Act:</t>
+
+        <artwork name="" type="" align="left" alt="A legitimate Candidate Act requesting delivery destination"><![CDATA[
+   Read address-619, for order-842, send to assigned-courier-6,
+   operation: obtain delivery destination
+]]></artwork>
+
+        <t>The PED checks this against binding records, not against the
+        request's own claims:</t>
+
+        <table anchor="ped-check-table">
+          <name>PED validation checks for the delivery Candidate Act</name>
+          <thead>
+            <tr><th>Check</th><th>Evidence checked</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Is this really the delivery service?</td><td>Authenticated workload identity</td></tr>
+            <tr><td>Does this order exist?</td><td>Order-management record</td></tr>
+            <tr><td>Does this address belong to the order?</td><td>Protected order-to-address association</td></tr>
+            <tr><td>Is this courier assigned?</td><td>Current courier-assignment record</td></tr>
+            <tr><td>Is the requested operation permitted?</td><td>Versioned policy (ALF match)</td></tr>
+            <tr><td>Is access still valid?</td><td>Order status, expiry, revocation state</td></tr>
+          </tbody>
+        </table>
+
+        <t>A pass issues a short-lived Execution Handle scoped to this
+        exact address, order, operation, and recipient; the Finality Sink
+        releases the minimum necessary delivery data on presentation of
+        that handle. Any check that cannot be completed -- a stale
+        record, an ambiguous assignment, an expired policy version --
+        MUST be treated as a failed check. The PED fails closed by
+        default; it does not proceed on missing or ambiguous
+        evidence.</t>
+      </section>
+
+      <section anchor="unauthorized-request" numbered="true" toc="default">
+        <name>An Unauthorized Request</name>
+        <t>An advertising workload submits:</t>
+
+        <artwork name="" type="" align="left" alt="An unauthorized Candidate Act attempting income inference"><![CDATA[
+   Read address-619, operation: infer household income,
+   destination: advertising-profile-database
+]]></artwork>
+
+        <t>Every check in <xref target="legit-request"/> fails: the
+        caller is not the delivery service, the operation is not the
+        permitted operation, and the destination is not the permitted
+        recipient. No Execution Handle is issued, no address is released,
+        and no decryption authority is granted. The rejection occurs
+        before the income computation begins -- blocking only the
+        resulting advertisement, after the profiling computation has
+        already run on the address, would not have prevented the
+        unauthorized use; it would only have hidden its output.</t>
+      </section>
+
+      <section anchor="relabeled-request" numbered="true" toc="default">
+        <name>A Relabeled Request</name>
+        <t>The advertising workload resubmits with a relabeled purpose
+        field:</t>
+
+        <artwork name="" type="" align="left" alt="A relabeled Candidate Act claiming a delivery purpose"><![CDATA[
+   Purpose: delivery, order: order-842
+]]></artwork>
+
+        <t>This does not change the outcome. The PED's checks are defined
+        over the caller's authenticated identity, its destination, and
+        its actual delivery-workflow authority -- none of which change
+        because the request's purpose field changed. A caller that
+        presents even a validly issued delivery Execution Handle from the
+        wrong workload identity or toward the wrong destination MUST fail
+        validation, provided identity and destination binding are
+        actually enforced at the Finality Sink and not only at issuance
+        time. Purpose, in this architecture, is a conclusion the PED
+        reaches from verifiable relationships -- not an input the caller
+        supplies.</t>
+      </section>
+
+      <section anchor="attested-enclave" numbered="true" toc="default">
+        <name>A Request From Inside an Attested Enclave</name>
+        <t>Suppose the income-inference computation runs inside a
+        hardware Trusted Execution Environment (TEE) that successfully
+        attests its own integrity. A successful attestation establishes
+        that the enclave is running the code it claims to run; it does
+        not establish that the code is authorized to decrypt address-619
+        for this purpose. The PED still evaluates workload identity and
+        requested operation against the same binding records, and an
+        enclave running an income-profiling workload receives no
+        authority to decrypt a delivery address it was never granted.</t>
+
+        <t>A caveat: if a broadly authorized enclave already holds
+        unrestricted plaintext access to the address for an unrelated
+        legitimate reason, an output-only Finality Sink cannot
+        retroactively undo profiling computation that already occurred
+        inside it. Access and computation boundaries require enforcement
+        at the point capability is granted, not only at the point output
+        is written.</t>
+      </section>
+
+      <section anchor="derived-value-request" numbered="true" toc="default">
+        <name>A Request for a Derived Value</name>
+        <t>The advertising system instead attempts to write a value
+        computed from, but not textually identical to, the address:</t>
+
+        <artwork name="" type="" align="left" alt="A derived value that omits the source address"><![CDATA[
+   customer-17 -> estimated high-income household
+]]></artwork>
+
+        <t>The value contains no street address. A Finality Sink that
+        checks only for the literal restricted value would pass it. A
+        Finality Sink that checks propagated source lineage does
+        not:</t>
+
+        <artwork name="" type="" align="left" alt="A derived object with tracked source lineage"><![CDATA[
+   Derived object: income-estimate-52
+   Restricted source: address-619
+   Requested use: advertising
+]]></artwork>
+
+        <t>The profile-write boundary rejects the write on the lineage
+        binding, not on pattern-matching the output. This requires
+        deliberate, non-removable tracking of derived-data provenance; a
+        label attached to the output that the producing workload can
+        choose to omit provides no enforcement at all.</t>
+      </section>
+
+      <section anchor="worked-example-close" numbered="true" toc="default">
+        <name>What This Architecture Does Not Close</name>
+        <t>If an authorized courier receives the plaintext address and
+        copies it into an unrelated application, the protected data
+        service cannot guarantee the copy is never reused. Containment
+        beyond this point requires controlled recipient software,
+        restricted export paths, minimal disclosure, and downstream
+        enforcement at the recipient's own boundary -- outside what a
+        source-side PED can observe. Human observation, screenshots, and
+        compromised endpoints remain outside this architecture's reach.
+        The claim this document makes is therefore bounded: within an
+        enforced system boundary, data can be made unavailable to
+        unauthorized workloads, and unauthorized derived-value writes can
+        be blocked. Preventing every possible reuse after legitimate
+        plaintext disclosure is a different, and materially harder,
+        problem that this document does not claim to solve.</t>
+      </section>
+    </section>
+
+    <section anchor="threat-model" numbered="true" toc="default">
+      <name>Threat Model</name>
+
+      <t>In scope:</t>
+      <ul spacing="normal">
+        <li>A requester relabels or forges the purpose field of a request
+        to obtain access to data it is not authorized to use for that
+        purpose (<xref target="relabeled-request"/>).</li>
+        <li>A requester assumes that running inside an attested TEE
+        substitutes for a purpose-authorization check
+        (<xref target="attested-enclave"/>).</li>
+        <li>A requester attempts to obtain a value derived from
+        restricted data as a way of evading a restriction on the source
+        value (<xref target="derived-value-request"/>).</li>
+        <li>A requester replays a validly issued Execution Handle from a
+        different workload identity or toward a different destination
+        than the one it was scoped to.</li>
+      </ul>
+
+      <t>Out of scope / residual risk:</t>
+      <ul spacing="normal">
+        <li>Reuse of data after legitimate plaintext release to an
+        authorized recipient (<xref target="worked-example-close"/>).</li>
+        <li>Compromise of the Protected Enforcement Domain itself, or of
+        the binding records it evaluates against; this architecture
+        assumes the PED and its record store are not themselves
+        attacker-controlled.</li>
+        <li>Side-channel or covert-channel exfiltration from within an
+        authorized, attested computation.</li>
+      </ul>
+    </section>
+
+    <section anchor="related-work" numbered="true" toc="default">
+      <name>Relation to Existing Work</name>
+
+      <t>The pattern of checking a request's declared purpose against a
+      policy before granting access is not new in the access-control
+      literature; purpose-based access control (PBAC) models and
+      attribute-based access control frameworks such as XACML define
+      policy evaluation over request attributes including purpose. This
+      document's distinguishing element is that the evaluated attributes
+      are drawn from binding records external to the request (order
+      state, recipient assignment, workload identity), the resulting
+      grant is a short-lived, non-bearer, single-scope Execution Handle
+      rather than a general session grant, and derived-value writes are
+      checked against propagated source lineage rather than against the
+      presence or absence of a purpose label on the output.</t>
+
+      <t>Decentralized information flow control (DIFC) systems address
+      the derived-data problem in <xref target="derived-value-request"/>
+      by propagating labels through computation at the operating-system
+      or language-runtime level. This document does not specify a
+      label-propagation mechanism; it specifies that a Finality Sink MUST
+      reject a derived-value write that cannot demonstrate valid source
+      lineage, leaving the propagation mechanism to the implementing
+      system.</t>
+
+      <t><xref target="RFC8707"/> (Resource Indicators for OAuth 2.0) and
+      audience restriction in OAuth 2.0 bearer tokens address a related
+      but narrower problem: binding a token to an intended resource
+      server. This document's Execution Handle extends that idea to bind
+      a grant to a specific operation and destination, evaluated per
+      Candidate Act rather than issued once per session.</t>
+    </section>
+
+    <section anchor="wg-relevance" numbered="true" toc="default">
+      <name>Relevance to IETF Working Groups</name>
+
+      <section anchor="wg-gnap" numbered="true" toc="default">
+        <name>GNAP</name>
+        <t>GNAP <xref target="RFC9635"/> already separates the
+        negotiation of a grant from its use, and supports fine-grained,
+        per-request access rather than a single broad session token. The
+        Execution Handle described here is compatible with a GNAP access
+        token scoped to a single resource/operation pair; this document's
+        contribution to GNAP-adjacent work is the requirement that the
+        Authorization Server's grant decision be made against
+        externally-verified binding records rather than against
+        client-supplied purpose or context claims, and that a
+        derived-resource request be evaluated against source lineage
+        rather than treated as a fresh, unrelated grant.</t>
+      </section>
+
+      <section anchor="wg-oauth" numbered="true" toc="default">
+        <name>OAUTH</name>
+        <t>OAuth 2.0 <xref target="RFC6749"/> deployments that rely on a
+        "purpose" or "scope" string supplied by the client are exposed to
+        exactly the relabeling attack in <xref target="relabeled-request"/>.
+        <xref target="RFC8707"/>'s audience restriction is a partial
+        mitigation already in the OAuth toolkit; this document suggests
+        that audience restriction alone is insufficient where the threat
+        model includes a legitimately audience-scoped token presented for
+        an operation outside its intended purpose, and that purpose
+        SHOULD be a property the authorization server derives from
+        verifiable request context rather than a bearer-supplied
+        claim.</t>
+      </section>
+
+      <section anchor="wg-rats" numbered="true" toc="default">
+        <name>RATS</name>
+        <t><xref target="attested-enclave"/> is directly a RATS-relevant
+        finding: this document treats a RATS <xref target="RFC9334"/>
+        Attestation Result as answering "is this code running as
+        expected" and treats purpose/operation authorization as a
+        separate, subsequent check that a Relying Party MUST perform
+        independently. Where RATS-based systems are used to gate access
+        to sensitive data, this document's caution against conflating
+        attestation with authorization is offered as an applicability
+        consideration.</t>
+      </section>
+
+      <section anchor="wg-spice" numbered="true" toc="default">
+        <name>SPICE</name>
+        <t>SPICE's work on credential formats and selective disclosure is
+        relevant to <xref target="collection"/>'s binding of a data
+        object to a specific permitted workflow: a credential-based
+        encoding of the "allowed workflow / allowed operation / allowed
+        recipient" policy record would let the binding travel with the
+        data object in a verifiable form rather than living only in a
+        centralized policy store, which may be of interest to SPICE's
+        scope on interoperable credential structures.</t>
+      </section>
+
+      <section anchor="wg-secdispatch" numbered="true" toc="default">
+        <name>SECDISPATCH</name>
+        <t>This document is submitted as an individual architectural
+        pattern rather than a protocol specification, and the author does
+        not assert a specific IETF venue for standardization. SECDISPATCH
+        is the appropriate venue to determine whether, and where, a
+        purpose-binding and derived-data-lineage mechanism of this kind
+        warrants protocol-level standardization versus remaining an
+        architectural pattern referenced by implementers of GNAP, OAuth,
+        and RATS-based systems.</t>
+      </section>
+
+      <section anchor="wg-pearg" numbered="true" toc="default">
+        <name>PEARG (IRTF)</name>
+        <t>The Privacy Enhancements and Assessment Research Group is an
+        IRTF research group rather than an IETF working group, and is
+        noted here because <xref target="derived-data-carries"/> and
+        <xref target="derived-value-request"/> (derived-data lineage) and
+        <xref target="worked-example-close"/> (the residual
+        plaintext-reuse limit) are research questions as much as
+        engineering ones; PEARG's work on privacy threat modeling and
+        assessment methodology is relevant to evaluating how completely a
+        lineage-propagation mechanism actually closes the derived-data
+        gap in practice.</t>
+      </section>
+    </section>
+
+    <section anchor="security" numbered="true" toc="default">
+      <name>Security Considerations</name>
+      <t>The security of this architecture reduces to the integrity of
+      the Protected Enforcement Domain and the binding records it
+      evaluates against. An attacker who can write to the
+      order-management record, the courier-assignment record, or the
+      policy-version store used in <xref target="legit-request"/> can
+      forge a passing evaluation without needing to compromise the PED's
+      logic itself; those records MUST be integrity-protected to a
+      standard at least as strong as the PED's own decision logic.
+      Execution Handles MUST be short-lived, single-scope, and non-bearer
+      (i.e., bound to and unusable outside the requester identity and
+      destination they were issued for) to limit the value of a captured
+      handle. LAVR generation on both pass and fail outcomes is REQUIRED
+      so that a rejected Candidate Act is not silently dropped in a way
+      that hides a probing attack pattern.</t>
+    </section>
+
+    <section anchor="privacy" numbered="true" toc="default">
+      <name>Privacy Considerations</name>
+      <t>This architecture is itself a privacy control, but it introduces
+      its own data: the PED's binding records, and the LAVR trail,
+      together describe who requested what data for what purpose and
+      when. That record is sensitive in its own right and access to it
+      SHOULD be governed by the same purpose-binding discipline described
+      in this document, to avoid recreating the original problem one
+      layer up. Implementations SHOULD apply data minimization to LAVR
+      contents -- recording that a check passed or failed and against
+      which policy version, rather than the full content of the
+      Candidate Act, where the Candidate Act's content is itself
+      sensitive.</t>
+    </section>
+
+    <section anchor="iana" numbered="true" toc="default">
+      <name>IANA Considerations</name>
+      <t>This document has no IANA actions.</t>
+    </section>
+
+    <section anchor="ipr-licensing" numbered="true" toc="default">
+      <name>Intellectual Property and Licensing</name>
+      <t>This document describes an architectural pattern that is part of
+      a broader execution-finality patent portfolio pursued by the
+      author. This document, and the accompanying reference material
+      referenced in <xref target="informative-references"/>, are made
+      available under CC BY-NC 4.0 by default. Patent rights in the
+      underlying architecture are reserved and are not licensed by
+      publication of this document. If any element described in this
+      document is incorporated into an IETF Standards Track
+      specification, the author intends to offer licensing on Fair,
+      Reasonable, and Non-Discriminatory (FRAND) terms consistent with
+      the IETF's IPR disclosure obligations under
+      <xref target="BCP79"/>.</t>
+    </section>
+
+    <section anchor="acknowledgments" numbered="true" toc="default">
+      <name>Acknowledgments</name>
+      <t>None yet.</t>
+    </section>
+
+    <section anchor="resources" numbered="true" toc="default">
+      <name>Resources</name>
+      <t><xref target="DAS-EU-AI-ACT"/> and
+      <xref target="DAS-GLOBAL-PRIVACY"/> develop the execution-
+      enforcement model summarized in this document in greater technical
+      detail, including Candidate Acts, protected validation, scoped
+      non-bearer authority, Finality Sink enforcement, and privacy and
+      jurisdictional controls, together with deployment considerations
+      not repeated here. Readers interested in the protocol mechanics are
+      encouraged to review those drafts alongside
+      <xref target="DAS-PRIVACY-FINALITY-IMPL"/>, a runnable reference
+      implementation of the privacy/purpose-enforcement path described in
+      <xref target="worked-example"/>.</t>
+
+      <t><xref target="DAS-PRIVACY-FINALITY-IMPL"/>'s built-in demo
+      enforces GDPR Article 5(1)(b) purpose limitation and AI Act-style
+      technical enforcement obligations as one concrete instance of the
+      general mechanism specified in this document. The demo models a
+      customer support request scoped to CUSTOMER_SUPPORT
+      (delivery_status, expected_delivery_date) and denies a resubmission
+      of the same request under TARGETED_MARKETING before any Finality
+      Sink effect is recorded -- the same Candidate Act / Protected
+      Enforcement Domain / Finality Sink pattern this document describes,
+      in regulation-agnostic form, as the delivery-address /
+      advertising-profiling example in <xref target="worked-example"/>.
+      The mapping between the two is direct:</t>
+
+      <table anchor="impl-mapping-table">
+        <name>Mapping between the reference implementation and this document</name>
+        <thead>
+          <tr><th>Reference implementation</th><th>This document</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Candidate Act (canonical JSON, SHA-256 digest)</td><td>Candidate Act (<xref target="terminology"/>)</td></tr>
+          <tr><td>Protected Enforcement Domain (PED)</td><td>Protected Enforcement Domain (<xref target="terminology"/>)</td></tr>
+          <tr><td>Signed act-bound Validation Permit + workload proof-of-possession</td><td>Execution Handle, non-bearer, scoped (<xref target="terminology"/>)</td></tr>
+          <tr><td>Finality Sink (independent re-verification)</td><td>Finality Sink (<xref target="terminology"/>)</td></tr>
+          <tr><td>Denied TARGETED_MARKETING substitution</td><td><xref target="relabeled-request"/>, relabeled / purpose-substituted request</td></tr>
+        </tbody>
+      </table>
+
+      <t>GDPR and the EU AI Act are the regulatory framing the reference
+      implementation was built to demonstrate; the enforcement mechanism
+      itself, as specified in this document, is regulation-agnostic and
+      does not depend on any one jurisdiction's law.
+      <xref target="DAS-PRIVACY-FINALITY-IMPL"/> explicitly disclaims
+      that it decides whether a purpose is legally legitimate, whether
+      consent is valid, or whether a controller satisfies any specific
+      data-protection statute; it enforces machine-readable rules
+      supplied to it, which is the same scope this document claims for
+      the architecture in <xref target="architecture"/>.</t>
+    </section>
+
+    <section anchor="latency" numbered="true" toc="default">
+      <name>Latency Characteristics (Non-Normative)</name>
+
+      <t>This section reports measured, not projected, latency for the
+      <xref target="DAS-PRIVACY-FINALITY-IMPL"/> reference
+      implementation's three sequential stages -- PED validation
+      (<xref target="legit-request"/>'s checks), permit issuance plus
+      workload proof-of-possession (the Execution Handle of
+      <xref target="terminology"/>), and Finality Sink verify-and-commit
+      (the atomic effect record of <xref target="architecture"/>) --
+      each timed within a single request iteration so the three figures
+      compose into one end-to-end path, at 500 iterations, on the SME
+      support-agent demo Candidate Act. Two runs are reported: the
+      implementation's own published figures, and an independent re-run
+      performed for this document on different hardware, as a sanity
+      check rather than a replacement measurement.</t>
+
+      <table anchor="latency-table">
+        <name>PED / permit / sink latency, published vs. independent re-run (microseconds)</name>
+        <thead>
+          <tr><th>Stage</th><th>Published median/p95/p99</th><th>Independent re-run median/p95/p99</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>PED validation</td><td>21.5 / 33.1 / 118.9</td><td>31.2 / 52.4 / 65.9</td></tr>
+          <tr><td>Permit + PoP</td><td>95.1 / 145.1 / 338.1</td><td>120.1 / 154.0 / 190.5</td></tr>
+          <tr><td>Sink verify + commit</td><td>271.4 / 371.9 / 499.7</td><td>335.4 / 385.9 / 459.9</td></tr>
+          <tr><td>End-to-end (sum of medians)</td><td>~388.0</td><td>~486.7</td></tr>
+        </tbody>
+      </table>
+
+      <t>Two observations follow directly from the data. First, the
+      Finality Sink's atomic commit step (SQLite BEGIN IMMEDIATE plus
+      unique-JTI replay check) dominates the total in both runs --
+      roughly 60-70% of end-to-end median latency -- not the
+      cryptographic verification steps (signature check,
+      proof-of-possession). This is consistent with the general
+      expectation that the fail-closed, atomic finality boundary of
+      <xref target="architecture"/> is the more expensive operation to
+      make correct, not the identity or purpose checks upstream of it.
+      Second, both runs land the end-to-end path under half a
+      millisecond, which is the basis for describing this as a
+      hot-path-suitable operation for interactive request/response
+      flows, subject to <xref target="feasibility"/>'s caveats about the
+      sink's storage backend.</t>
+
+      <t>As stated directly in the reference implementation and repeated
+      here: this is a local Python microbenchmark on a single process,
+      not a distributed-system or network-inclusive measurement, and it
+      is NOT a protocol performance claim. It excludes network
+      round-trip time between requester, PED, and Finality Sink when
+      these run as separate services; excludes the cost of the
+      binding-record lookups in <xref target="legit-request"/>'s check
+      table (the demo's vaults are in-process, not a networked
+      identity/order/policy store); and excludes concurrency effects --
+      SQLite's single-writer model means throughput, not just per-request
+      latency, is the binding constraint at production scale (see
+      <xref target="feasibility"/>). A deployment claiming this latency
+      profile MUST re-measure against its own storage backend, network
+      topology, and binding-record sources before relying on these
+      figures.</t>
+    </section>
+
+    <section anchor="feasibility" numbered="true" toc="default">
+      <name>Feasibility and Legacy System Integration</name>
+
+      <t><strong>Deployment topology.</strong> The PED, the Execution
+      Handle issuer, and the Finality Sink are logically separable and
+      MAY run as one process, as a sidecar per protected service, or as
+      independently administered services (a pattern already anticipated
+      by <xref target="DAS-PRIVACY-FINALITY-IMPL"/>'s note that
+      vaults/PED/sink state can move into separate processes, TEEs, HSMs,
+      confidential VMs, or DPUs/SmartNICs). The architecture is agnostic
+      to which topology an adopter chooses; <xref target="latency"/>'s
+      figures were measured in-process and should be treated as a floor,
+      not a ceiling, once a real network hop separates these
+      components.</t>
+
+      <t><strong>Cold path / hot path split.</strong> Companion draft
+      draft-das-execution-finality-protocol-layer-00 separates policy
+      reasoning (which bindings apply, which policy version is current)
+      from deterministic verification (does this specific Candidate Act
+      satisfy those bindings). The former can be cached, precomputed, or
+      evaluated asynchronously as records change; the latter is what
+      <xref target="latency"/> measures and is designed to stay on the
+      interactive request path. Implementers SHOULD keep policy lookups
+      (the "cold" work) out of the per-request hot path so that the
+      Finality Sink's atomic commit remains the dominant, and only,
+      per-request cost.</t>
+
+      <t><strong>Throughput and storage backend.</strong> The reference
+      implementation's SQLite-backed replay/effect store uses a
+      single-writer commit model; at the measured ~330-490 us per commit,
+      a single Finality Sink instance backed by SQLite is bounded to
+      roughly two to three thousand committed effects per second before
+      write contention dominates. This is adequate for the SME demo's
+      scale and NOT representative of a production deployment's
+      requirements; a production Finality Sink SHOULD replace the
+      single-writer store with a backend that supports concurrent atomic
+      commit with equivalent replay-prevention guarantees (e.g., a
+      transactional database cluster or an append-only ledger with
+      unique-nonce enforcement), and MUST preserve the fail-closed,
+      atomic-consume property of <xref target="legit-request"/> when
+      doing so -- a faster backend that weakens atomicity reintroduces
+      the race this architecture exists to close.</t>
+
+      <t><strong>Legacy system integration without a flag day.</strong>
+      This architecture is intended to be adopted incrementally, not as a
+      wholesale replacement of existing access control:</t>
+
+      <ul spacing="normal">
+        <li>It SHOULD be deployed as an additional enforcement point
+        positioned at or behind an existing API gateway, service mesh, or
+        authorization layer (OAuth, GNAP, internal ABAC), not as a
+        replacement for those systems. Coarse-grained authentication and
+        general access control continue to run unchanged; this
+        architecture adds a finer-grained, purpose-and-lineage-aware
+        check at the specific data objects and operations an adopter
+        chooses to protect.</li>
+
+        <li>Adoption SHOULD proceed data-object-class by
+        data-object-class. A newly protected class (e.g., delivery
+        addresses, as in <xref target="worked-example"/>) is bound to
+        policy and enforced from the moment it is onboarded; classes not
+        yet onboarded continue to be served by whatever legacy access
+        control already governs them.</li>
+
+        <li>An unmigrated resource MUST NOT be represented, in logs,
+        dashboards, or documentation, as being under this architecture's
+        enforcement. A resource with no binding record is not
+        "permissively allowed" by this architecture -- it is simply
+        outside its scope, and an adopter that fails to mark that
+        distinction risks the false sense of security this document
+        argues against in <xref target="purpose-not-verifiable"/>.</li>
+
+        <li>No retroactive protection is created for data already
+        released under a legacy regime before onboarding.
+        <xref target="worked-example-close"/>'s residual limitation
+        applies identically here: onboarding a data class going forward
+        does not constrain copies already made under the prior
+        regime.</li>
+      </ul>
+
+      <t><strong>Real-time bidding and other latency-constrained
+      environments.</strong> Real-time bidding (RTB) in programmatic
+      advertising operates within an auction window commonly on the
+      order of 100 milliseconds end-to-end across multiple participants
+      (supply-side platform, ad exchange, and one or more demand-side
+      platforms). This is among the tightest latency budgets this
+      architecture might be applied to and deserves direct treatment
+      rather than a general feasibility claim.</t>
+
+      <t>Cross-referencing data across advertising systems -- combining
+      signals from multiple sources to select or price an ad -- is a
+      legitimate, economically load-bearing function of the industry
+      and is not, by itself, the problem this document addresses. The
+      problem is unauthorized cross-referencing: a system consuming a
+      signal for a use it was never granted, the same reuse pattern
+      illustrated with delivery data in <xref target="unauthorized-request"/>.
+      Removing an advertising system's ability to combine data in order
+      to make it "safe" would eliminate the function the system exists
+      to perform and would stall a significant share of the economic
+      activity the industry depends on; that is not this document's
+      goal. The goal is to make an authorized combination technically
+      demonstrable, and an unauthorized one technically blocked, rather
+      than leaving the boundary between the two resting entirely on a
+      data-sharing agreement that no downstream system actually checks
+      -- this architecture is offered as a way to make lawful
+      cross-referencing verifiable, not as a way to stop
+      cross-referencing.</t>
+
+      <t>Whether this is achievable inside a 100ms RTB budget is a
+      question of where in the bid path enforcement is placed, not
+      whether enforcement is possible at all:</t>
+
+      <ul spacing="normal">
+        <li>A per-bid Candidate Act evaluated against a live policy
+        store, with a TEE remote-attestation round-trip inline in the
+        bid path, is not compatible with a 100ms budget; the
+        attestation handshake alone commonly consumes a large share of
+        that budget on its own, independent of anything measured in
+        <xref target="latency"/>.</li>
+
+        <li><xref target="latency"/>'s measurements (sub-millisecond
+        PED validation, permit issuance, and Finality Sink commit) are
+        achievable in-path only if the expensive part -- deciding
+        whether a given combination of data sources is authorized for
+        a given advertiser/publisher/purpose triple -- is treated as
+        cold-path work, evaluated and cached well before any individual
+        bid, and refreshed on a policy change rather than on every
+        auction. What remains in the 100ms hot path is then the cheap,
+        deterministic step: verifying that this bid's Candidate Act
+        matches an already-issued, still-valid Execution Handle for
+        this exact combination -- the sub-millisecond range
+        <xref target="latency"/> measured, not a fresh policy
+        evaluation or a fresh attestation.</li>
+
+        <li>Under this split, the architecture does not ask an RTB
+        system to slow its auction down to perform compliance work
+        live; it asks the system to be able to produce, on demand, a
+        verifiable record that a specific data combination used in a
+        specific bid was covered by a specific, current authorization
+        -- which is close to what a regulator asking for evidence of
+        purpose-limitation compliance is already asking advertising
+        companies to be able to produce, typically without
+        machine-checkable evidence to offer today.</li>
+      </ul>
+
+      <t>An implementer that attempts to fit full live policy evaluation
+      and attestation into the per-bid path will fail the latency
+      budget and should not attempt to. An implementer that separates
+      authorization (cold, cacheable, amortized across many bids) from
+      verification (hot, sub-millisecond, per bid) has a credible path
+      to a compliance record without materially affecting auction
+      latency -- and a credible, auditable basis for arguing that its
+      cross-referencing practice is lawful, rather than merely
+      asserted to be.</t>
+
+      <t><strong>Feasibility summary.</strong> The mechanism itself --
+      Candidate Act, binding-record check, scoped Execution Handle,
+      atomic Finality Sink commit -- is implementable with commodity
+      components (a policy/record store, an Ed25519 signing service, and
+      a transactional commit boundary) and does not require new
+      hardware, though <xref target="attested-enclave"/> notes that
+      hardware-rooted attestation strengthens, without being required by,
+      the workload-identity leg of <xref target="legit-request"/>'s
+      checks. The primary adoption cost is organizational rather than
+      cryptographic: identifying which binding records (order state,
+      recipient assignment, workload identity) an adopter's systems
+      already maintain reliably, versus which must be newly built, since
+      the PED's validity depends entirely on the trustworthiness of the
+      records it checks against (<xref target="security"/>).</t>
+    </section>
+
+  </middle>
+
+  <back>
+    <references anchor="normative-references">
+      <name>Normative References</name>
+      <reference anchor="RFC2119" target="https://www.rfc-editor.org/info/rfc2119">
+        <front>
+          <title>Key words for use in RFCs to Indicate Requirement Levels</title>
+          <author initials="S." surname="Bradner" fullname="S. Bradner"/>
+          <date year="1997" month="March"/>
+        </front>
+        <seriesInfo name="BCP" value="14"/>
+        <seriesInfo name="RFC" value="2119"/>
+        <seriesInfo name="DOI" value="10.17487/RFC2119"/>
+      </reference>
+      <reference anchor="RFC8174" target="https://www.rfc-editor.org/info/rfc8174">
+        <front>
+          <title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title>
+          <author initials="B." surname="Leiba" fullname="B. Leiba"/>
+          <date year="2017" month="May"/>
+        </front>
+        <seriesInfo name="BCP" value="14"/>
+        <seriesInfo name="RFC" value="8174"/>
+        <seriesInfo name="DOI" value="10.17487/RFC8174"/>
+      </reference>
+    </references>
+
+    <references anchor="informative-references">
+      <name>Informative References</name>
+
+      <reference anchor="RFC9334" target="https://www.rfc-editor.org/info/rfc9334">
+        <front>
+          <title>Remote ATtestation procedureS (RATS) Architecture</title>
+          <author initials="H." surname="Birkholz" fullname="H. Birkholz"/>
+          <author initials="D." surname="Thaler" fullname="D. Thaler"/>
+          <author initials="M." surname="Richardson" fullname="M. Richardson"/>
+          <author initials="N." surname="Smith" fullname="N. Smith"/>
+          <author initials="W." surname="Pan" fullname="W. Pan"/>
+          <date year="2023" month="January"/>
+        </front>
+        <seriesInfo name="RFC" value="9334"/>
+        <seriesInfo name="DOI" value="10.17487/RFC9334"/>
+      </reference>
+
+      <reference anchor="RFC9635" target="https://www.rfc-editor.org/info/rfc9635">
+        <front>
+          <title>Grant Negotiation and Authorization Protocol (GNAP)</title>
+          <author initials="J." surname="Richer" fullname="J. Richer"/>
+          <author initials="F." surname="Imbault" fullname="F. Imbault"/>
+          <date year="2024" month="October"/>
+        </front>
+        <seriesInfo name="RFC" value="9635"/>
+        <seriesInfo name="DOI" value="10.17487/RFC9635"/>
+      </reference>
+
+      <reference anchor="RFC6749" target="https://www.rfc-editor.org/info/rfc6749">
+        <front>
+          <title>The OAuth 2.0 Authorization Framework</title>
+          <author initials="D." surname="Hardt" fullname="D. Hardt" role="editor"/>
+          <date year="2012" month="October"/>
+        </front>
+        <seriesInfo name="RFC" value="6749"/>
+        <seriesInfo name="DOI" value="10.17487/RFC6749"/>
+      </reference>
+
+      <reference anchor="RFC7519" target="https://www.rfc-editor.org/info/rfc7519">
+        <front>
+          <title>JSON Web Token (JWT)</title>
+          <author initials="M." surname="Jones" fullname="M. Jones"/>
+          <author initials="J." surname="Bradley" fullname="J. Bradley"/>
+          <author initials="N." surname="Sakimura" fullname="N. Sakimura"/>
+          <date year="2015" month="May"/>
+        </front>
+        <seriesInfo name="RFC" value="7519"/>
+        <seriesInfo name="DOI" value="10.17487/RFC7519"/>
+      </reference>
+
+      <reference anchor="RFC8707" target="https://www.rfc-editor.org/info/rfc8707">
+        <front>
+          <title>Resource Indicators for OAuth 2.0</title>
+          <author initials="B." surname="Campbell" fullname="B. Campbell"/>
+          <author initials="A." surname="Bansal" fullname="A. Bansal"/>
+          <date year="2020" month="February"/>
+        </front>
+        <seriesInfo name="RFC" value="8707"/>
+        <seriesInfo name="DOI" value="10.17487/RFC8707"/>
+      </reference>
+
+      <reference anchor="BCP79" target="https://www.rfc-editor.org/info/bcp79">
+        <front>
+          <title>Intellectual Property Rights in IETF Technology</title>
+          <author><organization>IETF</organization></author>
+          <date/>
+        </front>
+        <seriesInfo name="BCP" value="79"/>
+      </reference>
+
+      <reference anchor="DAS-PRECISION-EGRESS" target="https://datatracker.ietf.org/doc/draft-das-precision-bounded-egress/">
+        <front>
+          <title>Precision-Bounded Egress</title>
+          <author initials="S." surname="Das" fullname="S. Das"/>
+          <date/>
+        </front>
+        <refcontent>Work in Progress</refcontent>
+      </reference>
+
+      <reference anchor="DAS-EU-AI-ACT" target="https://datatracker.ietf.org/doc/draft-das-eu-ai-act-execution-enforcement/">
+        <front>
+          <title>Technical Execution Enforcement for the EU AI Act</title>
+          <author initials="S." surname="Das" fullname="S. Das"/>
+          <date/>
+        </front>
+        <refcontent>Work in Progress</refcontent>
+      </reference>
+
+      <reference anchor="DAS-GLOBAL-PRIVACY" target="https://datatracker.ietf.org/doc/draft-das-global-privacy-execution-enforcement/">
+        <front>
+          <title>Global Privacy Execution Enforcement</title>
+          <author initials="S." surname="Das" fullname="S. Das"/>
+          <date/>
+        </front>
+        <refcontent>Work in Progress</refcontent>
+      </reference>
+
+      <reference anchor="FUTURIUM-PURPOSE-LAUNDERING" target="https://futurium.ec.europa.eu/en/apply-ai-alliance/community-content/preventing-data-purpose-laundering-agentic-ai-hardware-rooted-pre-effectuation-layer-gdpr-purpose">
+        <front>
+          <title>Preventing Data-Purpose Laundering by Agentic AI: A Hardware-Rooted Pre-Effectuation Layer for GDPR Purpose Limitation and High-Risk AI Governance</title>
+          <author initials="S." surname="Das" fullname="S. Das"/>
+          <date/>
+        </front>
+        <refcontent>EU AI Alliance Futurium</refcontent>
+      </reference>
+
+      <reference anchor="FUTURIUM-PAPER-COMPLIANCE" target="https://futurium.ec.europa.eu/en/apply-ai-alliance/posts/paper-compliance-technical-enforcement-making-gdpr-and-eu-ai-act-executable-ai-era">
+        <front>
+          <title>From Paper Compliance to Technical Enforcement: Making GDPR and the EU AI Act Executable in the AI Era</title>
+          <author initials="S." surname="Das" fullname="S. Das"/>
+          <date/>
+        </front>
+        <refcontent>EU AI Alliance Futurium</refcontent>
+      </reference>
+
+      <reference anchor="DAS-PRIVACY-FINALITY-IMPL" target="https://github.com/sangmdas/privacy-finality-reference">
+        <front>
+          <title>Privacy Finality Reference Implementation</title>
+          <author initials="S." surname="Das" fullname="S. Das"/>
+          <date/>
+        </front>
+        <refcontent>GitHub repository</refcontent>
+      </reference>
+    </references>
+  </back>
+</rfc>

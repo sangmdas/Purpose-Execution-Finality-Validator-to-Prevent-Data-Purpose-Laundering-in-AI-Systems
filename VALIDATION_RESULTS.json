@@ -1,0 +1,32 @@
+{
+  "date": "2026-09-09",
+  "pytest": {"passed": 88, "failed": 0},
+  "cross_language_conformance": {
+    "vectors": 19,
+    "python": "19/19",
+    "go": "19/19",
+    "node": "19/19"
+  },
+  "adversarial_stress": {
+    "seed": 20260909,
+    "post_issue_mutations": "1000/1000 denied",
+    "purpose_relabels": "500/500 denied",
+    "wrong_holder_pop": "500/500 denied"
+  },
+  "primary_benchmark_p95_ms": {
+    "in_process_memory": 0.2106,
+    "in_process_sqlite": 0.2560,
+    "loopback_http_sidecar": 2.1363
+  },
+  "repeated_benchmark_p95_ranges_ms": {
+    "in_process_memory": [0.2154, 0.2424],
+    "in_process_sqlite": [0.2605, 0.4145],
+    "loopback_http_sidecar": [2.0291, 2.3466]
+  },
+  "repository_p95_targets_ms": {
+    "in_process_memory": 5,
+    "in_process_sqlite": 10,
+    "loopback_http_sidecar": 20
+  },
+  "scope_note": "Local software-reference results only; no TEE/HSM/GPU/WAN/distributed-production performance claim."
+}

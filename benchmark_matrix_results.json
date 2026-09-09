@@ -1,0 +1,48 @@
+{
+  "clock": "time.perf_counter_ns",
+  "host_scope": "single Linux host; no external network/TEE/HSM",
+  "variants": {
+    "in_process_memory": {
+      "iterations": 3000,
+      "warmup": 300,
+      "target_p95_ms": 5.0,
+      "measured": {
+        "p50_ms": 0.1678,
+        "p95_ms": 0.2106,
+        "p99_ms": 0.2618,
+        "mean_ms": 0.1796,
+        "min_ms": 0.1604,
+        "max_ms": 3.0804
+      },
+      "target_pass": true
+    },
+    "in_process_sqlite": {
+      "iterations": 2000,
+      "warmup": 200,
+      "target_p95_ms": 10.0,
+      "measured": {
+        "p50_ms": 0.1987,
+        "p95_ms": 0.256,
+        "p99_ms": 0.3841,
+        "mean_ms": 0.2147,
+        "min_ms": 0.1892,
+        "max_ms": 2.7283
+      },
+      "target_pass": true
+    },
+    "loopback_http_sidecar": {
+      "iterations": 1000,
+      "warmup": 100,
+      "target_p95_ms": 20.0,
+      "measured": {
+        "p50_ms": 1.467,
+        "p95_ms": 2.1363,
+        "p99_ms": 3.7796,
+        "mean_ms": 1.5826,
+        "min_ms": 1.0951,
+        "max_ms": 10.5086
+      },
+      "target_pass": true
+    }
+  }
+}
